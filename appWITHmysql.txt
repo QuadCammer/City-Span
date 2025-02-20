@@ -1,0 +1,250 @@
+import javax.swing.*;
+import java.awt.Desktop;
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.sql.*;
+
+public class DistanceCalculatorApp {
+    private JTextField lat1Field, lon1Field, lat2Field, lon2Field;
+    private JTextField pop1Field, area1Field, pop2Field, area2Field;  // Fields for population and area
+    private JLabel resultLabel, popGrowthLabel, areaGrowthLabel;  // Labels for new metrics
+
+    // Google Maps API key
+    private static final String GOOGLE_API_KEY = "AIzaSyA9gc_T6QrOJ6oqqsCLRMW8qwL5dd5ziAo"; // Your actual API key
+
+    // MySQL connection parameters
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/DistanceCalculatorDB";
+    private static final String DB_USER = "root"; // Your MySQL username
+    private static final String DB_PASSWORD = "Akshat@2004"; // Your MySQL password
+
+    public DistanceCalculatorApp() {
+        setupGUI();
+    }
+
+    public static void main(String[] args) {
+        new DistanceCalculatorApp();
+    }
+
+    private void setupGUI() {
+        // Frame setup
+        JFrame frame = new JFrame("Distance Calculator");
+        frame.setSize(500, 400);
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setLayout(null);
+
+        // Point 1 Label
+        JLabel label1 = new JLabel("Point 1 (lat, lon):");
+        label1.setBounds(20, 20, 120, 20);
+        frame.add(label1);
+
+        // Point 1 Latitude Text Field
+        lat1Field = new JTextField();
+        lat1Field.setBounds(150, 20, 60, 20);
+        frame.add(lat1Field);
+
+        // Point 1 Longitude Text Field
+        lon1Field = new JTextField();
+        lon1Field.setBounds(220, 20, 60, 20);
+        frame.add(lon1Field);
+
+        // Point 1 Population Label
+        JLabel pop1Label = new JLabel("Population 1:");
+        pop1Label.setBounds(20, 50, 120, 20);
+        frame.add(pop1Label);
+
+        // Point 1 Population Text Field
+        pop1Field = new JTextField();
+        pop1Field.setBounds(150, 50, 60, 20);
+        frame.add(pop1Field);
+
+        // Point 1 Area Label
+        JLabel area1Label = new JLabel("Area 1:");
+        area1Label.setBounds(220, 50, 120, 20);
+        frame.add(area1Label);
+
+        // Point 1 Area Text Field
+        area1Field = new JTextField();
+        area1Field.setBounds(300, 50, 60, 20);
+        frame.add(area1Field);
+
+        // Point 2 Label
+        JLabel label2 = new JLabel("Point 2 (lat, lon):");
+        label2.setBounds(20, 100, 120, 20);
+        frame.add(label2);
+
+        // Point 2 Latitude Text Field
+        lat2Field = new JTextField();
+        lat2Field.setBounds(150, 100, 60, 20);
+        frame.add(lat2Field);
+
+        // Point 2 Longitude Text Field
+        lon2Field = new JTextField();
+        lon2Field.setBounds(220, 100, 60, 20);
+        frame.add(lon2Field);
+
+        // Point 2 Population Label
+        JLabel pop2Label = new JLabel("Population 2:");
+        pop2Label.setBounds(20, 130, 120, 20);
+        frame.add(pop2Label);
+
+        // Point 2 Population Text Field
+        pop2Field = new JTextField();
+        pop2Field.setBounds(150, 130, 60, 20);
+        frame.add(pop2Field);
+
+        // Point 2 Area Label
+        JLabel area2Label = new JLabel("Area 2:");
+        area2Label.setBounds(220, 130, 120, 20);
+        frame.add(area2Label);
+
+        // Point 2 Area Text Field
+        area2Field = new JTextField();
+        area2Field.setBounds(300, 130, 60, 20);
+        frame.add(area2Field);
+
+        // Calculate Button
+        JButton calculateButton = new JButton("Calculate Distance");
+        calculateButton.setBounds(120, 160, 150, 30);
+        frame.add(calculateButton);
+
+        // Action listener for button click
+        calculateButton.addActionListener(_ -> calculateMetrics());
+
+        // Result Label
+        resultLabel = new JLabel("Distance: ");
+        resultLabel.setBounds(20, 200, 300, 20);
+        frame.add(resultLabel);
+
+        // Population Growth Label
+        popGrowthLabel = new JLabel("Population Growth: ");
+        popGrowthLabel.setBounds(20, 230, 300, 20);
+        frame.add(popGrowthLabel);
+
+        // Area Growth Label
+        areaGrowthLabel = new JLabel("Area Growth: ");
+        areaGrowthLabel.setBounds(20, 260, 300, 20);
+        frame.add(areaGrowthLabel);
+
+        // Show on Map Button
+        JButton mapButton = new JButton("Show on Map");
+        mapButton.setBounds(120, 290, 150, 30);
+        frame.add(mapButton);
+
+        // Action listener for map button click
+        mapButton.addActionListener(_ -> openMap());
+
+        frame.setVisible(true);
+    }
+
+    private void calculateMetrics() {
+        try {
+            // Get latitude and longitude values
+            double lat1 = Double.parseDouble(lat1Field.getText());
+            double lon1 = Double.parseDouble(lon1Field.getText());
+            double lat2 = Double.parseDouble(lat2Field.getText());
+            double lon2 = Double.parseDouble(lon2Field.getText());
+
+            // Get population and area values
+            double pop1 = Double.parseDouble(pop1Field.getText());
+            double area1 = Double.parseDouble(area1Field.getText());
+            double pop2 = Double.parseDouble(pop2Field.getText());
+            double area2 = Double.parseDouble(area2Field.getText());
+
+            // Input validation for latitude and longitude ranges
+            if (lat1 < -90 || lat1 > 90 || lon1 < -180 || lon1 > 180 || lat2 < -90 || lat2 > 90 || lon2 < -180 || lon2 > 180) {
+                resultLabel.setText("Invalid coordinates! Please enter valid latitude and longitude values.");
+                return;
+            }
+
+            // Calculate distance
+            double distance = haversine(Math.toRadians(lat1), Math.toRadians(lon1), Math.toRadians(lat2), Math.toRadians(lon2));
+            resultLabel.setText("Distance: " + String.format("%.2f km", distance));
+
+            // Calculate population growth percentage
+            double popGrowth = calculatePercentageGrowth(pop1, pop2);
+            popGrowthLabel.setText("Population Growth: " + String.format("%.2f%%", popGrowth));
+
+            // Calculate area growth percentage
+            double areaGrowth = calculatePercentageGrowth(area1, area2);
+            areaGrowthLabel.setText("Area Growth: " + String.format("%.2f%%", areaGrowth));
+
+            // Save data to MySQL database
+            saveDataToDatabase(lat1, lon1, lat2, lon2, pop1, area1, pop2, area2, distance, popGrowth, areaGrowth);
+
+        } catch (NumberFormatException ex) {
+            resultLabel.setText("Invalid input! Please enter valid coordinates, population, and area.");
+        }
+    }
+
+    private double haversine(double lat1, double lon1, double lat2, double lon2) {
+        final double EARTH_RADIUS_KM = 6371.0;
+        double deltaLat = lat2 - lat1;
+        double deltaLon = lon2 - lon1;
+
+        double a = Math.pow(Math.sin(deltaLat / 2), 2) +
+                Math.cos(lat1) * Math.cos(lat2) * Math.pow(Math.sin(deltaLon / 2), 2);
+
+        return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(a));
+    }
+
+    private double calculatePercentageGrowth(double initial, double finalValue) {
+        if (initial == 0) return 0; // Avoid division by zero
+        return ((finalValue - initial) / initial) * 100; // Calculate the percentage growth
+    }
+
+    private void openMap() {
+        try {
+            double lat1 = Double.parseDouble(lat1Field.getText());
+            double lon1 = Double.parseDouble(lon1Field.getText());
+            double lat2 = Double.parseDouble(lat2Field.getText());
+            double lon2 = Double.parseDouble(lon2Field.getText());
+
+            String marker1 = "color:red|" + lat1 + "," + lon1;
+            String marker2 = "color:blue|" + lat2 + "," + lon2;
+
+            String encodedMarker1 = URLEncoder.encode(marker1, StandardCharsets.UTF_8);
+            String encodedMarker2 = URLEncoder.encode(marker2, StandardCharsets.UTF_8);
+
+            // Adjusted zoom level for better view of both points
+            String googleMapUrl = String.format(
+                    "https://maps.googleapis.com/maps/api/staticmap?" +
+                            "markers=%s&markers=%s&zoom=5&size=800x600&key=%s",
+                    encodedMarker1, encodedMarker2, GOOGLE_API_KEY
+            );
+
+            Desktop.getDesktop().browse(new URI(googleMapUrl));
+        } catch (NumberFormatException | IOException | URISyntaxException e) {
+            resultLabel.setText("Invalid coordinates or error opening map.");
+        }
+    }
+
+    private void saveDataToDatabase(double lat1, double lon1, double lat2, double lon2,
+                                    double pop1, double area1, double pop2, double area2,
+                                    double distance, double popGrowth, double areaGrowth) {
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             PreparedStatement pstmt = conn.prepareStatement(
+                     "INSERT INTO calculations (lat1, lon1, lat2, lon2, pop1, area1, pop2, area2, distance, pop_growth, area_growth) " +
+                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
+
+            pstmt.setDouble(1, lat1);
+            pstmt.setDouble(2, lon1);
+            pstmt.setDouble(3, lat2);
+            pstmt.setDouble(4, lon2);
+            pstmt.setDouble(5, pop1);
+            pstmt.setDouble(6, area1);
+            pstmt.setDouble(7, pop2);
+            pstmt.setDouble(8, area2);
+            pstmt.setDouble(9, distance);
+            pstmt.setDouble(10, popGrowth);
+            pstmt.setDouble(11, areaGrowth);
+
+            pstmt.executeUpdate();
+            resultLabel.setText("Data saved successfully!");
+        } catch (SQLException e) {
+            resultLabel.setText("Database error: " + e.getMessage());
+        }
+    }
+}
